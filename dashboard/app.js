@@ -159,7 +159,7 @@
       '<tr><td>inside P25–P75, stated 50%</td><td class="num">' + pct(vm.honesty_loo_p25_75) + '</td><td class="num">' + pct(vm.honesty_wf_p25_75) + '</td></tr>' +
       '<tr><td>inside P10–P90, stated 80%</td><td class="num">' + pct(vm.honesty_loo_p10_90) + '</td><td class="num">' + pct(vm.honesty_wf_p10_90) + '</td></tr>';
     var se = vm.coef_se || {};
-    var foot = 'Fitted, ± standard error: multiple at $100M TVL ×' + num(vm.base_multiple_at_100m, 2) +
+    var foot = 'Fitted, ± standard error: value at $100M TVL ' + money(vm.base_multiple_at_100m) +
       (se.tvl != null ? ', size slope ' + num(vm.coefs.tvl, 2) + ' ± ' + num(se.tvl, 2) : '') +
       (se.growth != null ? ', 7-day growth ' + num(vm.coefs.growth, 2) + ' ± ' + num(se.growth, 2) : '') +
       (se.age != null ? ', age ' + num(vm.coefs.age, 2) + ' ± ' + num(se.age, 2) : '') +
@@ -278,12 +278,21 @@
       '<table><tr><th>At risk</th><th class="num">Fees, ' + state.weeks + ' weeks</th><th class="num">Modelled drop</th><th class="num">Net of fees</th><th class="num">Hands-on</th><th class="num">Net per hour</th></tr>' +
       '<tr><td class="num">$' + effDep.toLocaleString('en-US') + '</td><td class="num">$' + f.fees.toFixed(2) + '</td><td class="num">$' + f.drop.toFixed(0) + '</td><td class="num">$' + f.net.toFixed(0) + '</td><td class="num">' + (f.minutes / 60).toFixed(1) + ' h</td><td class="num">$' + f.perHour.toFixed(2) + '</td></tr></table>' +
       '<p class="footnote">The deposit is sized to the protocol: $10,000, or 0.02% of TVL when that is smaller — one wallet never holds more than 0.02% of a pool. Benchmarks: same $' + effDep.toLocaleString('en-US') + ' in a 4% T-bill, ' + state.weeks + ' weeks: $' + f.tbill.toFixed(0) + '. Drop if a token does launch (the whole pool): ' + money(r.farm.benchmarks.drop_pool_usd) + '. Exit if TVL prints below ' + money(r.farm.benchmarks.exit_tvl_usd) + '.</p></div></div>';
+    // The fitted value at $100M TVL is a dollar figure, not a multiple; the
+    // size curve is its own factor, and each other term multiplies by
+    // exp(coef x feature). r.model holds the coefficients, so the features
+    // are read back from the row itself, using the same definitions as the
+    // model (age in years from age_days, 1.0 when unlisted; growth raw;
+    // chains as ln of the chain count).
+    var ageYears = r.age_days == null ? 1 : r.age_days / 365.25;
+    var feat = { growth: (r.change_7d == null ? 0 : r.change_7d), age: ageYears, chains: Math.log(Math.max(1, r.chains.length)) };
     h += '<div class="grid2"><div class="card"><h3>How the figure is made</h3><table>' +
       '<tr><td>TVL</td><td class="num">' + money(r.tvl_usd) + '</td></tr>' +
-      '<tr><td>Base multiple, at $100M TVL</td><td class="num">×' + num(vm.base_multiple_at_100m, 2) + '</td></tr>';
+      '<tr><td>Fitted value at $100M TVL</td><td class="num">' + money(vm.base_multiple_at_100m) + '</td></tr>' +
+      '<tr><td>Size curve (TVL ÷ $100M)^' + num(vm.coefs.tvl, 2) + '</td><td class="num">×' + num(Math.pow(r.tvl_usd / 100000000, vm.coefs.tvl), 2) + '</td></tr>';
     Object.keys(vm.coefs).forEach(function (t) {
       if (t === 'tvl') return;
-      var v = t === 'growth' ? (r.model.growth ?? 0) : t === 'age' ? (r.model.age ?? 0) : t === 'chains' ? (r.model.chains ?? 0) : 0;
+      var v = feat[t] == null ? 0 : feat[t];
       h += '<tr><td>' + esc(t) + ' term (' + num(vm.coefs[t], 2) + ')</td><td class="num">×' + num(Math.exp(vm.coefs[t] * v), 2) + '</td></tr>';
     });
     h += '<tr><td>Category effect, ' + esc(r.category || 'none') + '</td><td class="num">×' + num(Math.exp(r.model.category_offset || 0), 2) + '</td></tr>' +
